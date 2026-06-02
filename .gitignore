@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+
+# WhatsApp session (credentials)
+sessions/
+
+# Logs
+*.log
+
+# OS
+.DS_Store

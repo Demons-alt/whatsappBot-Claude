@@ -1,0 +1,27 @@
+## PROJECT BRIEF
+Nama project: whatsapp chat bot 
+Deskripsi: ini adalah bot whatsapp yg kedepannya akan serba guna dan bisa di tambahkan beberapa fitur-fitur yg menarik menggunakan module Baileys untuk terhubung dengan whatsapp
+
+## TECH STACK
+Backend: nestJS
+Database: PostgreSQL
+Hosting target: docker pada vps
+AI: antropic atau claude
+
+## FITUR UTAMA
+1. bisa menjawab dan melanjutkan obrolan serta dapat melakukan multiple bubble chat
+2. terdapat beberapa tools simple sepeti melihat cuaca 
+3. terapkan beberapa key comand seperti /reset untuk melakukan reset chat 
+
+## FITUR YANG TIDAK PERLU (scope limit)
+- chat hanya bisa dilakukan pada roomchat pribadi bukan grub dll
+- tidak perlu generate gambar 
+
+## YANG SAYA MINTA DARIMU SEKARANG
+Sebelum menulis satu baris kode pun, tolong:
+1. Sarankan tech stack terbaik (kalau belum ditentukan)
+2. Buat struktur folder project
+3. List semua halaman / route yang dibutuhkan
+4. List komponen utama yang perlu dibuat
+5. Tentukan urutan pengerjaan dari awal sampai MVP
+6. Tanyakan hal yang masih ambigu
