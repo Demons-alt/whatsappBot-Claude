@@ -346,15 +346,13 @@ Contoh: "Halo! 👋|||Ada yang bisa aku bantu hari ini?"`;
 
 **Membangun history percakapan**
 
-TypeORM mengembalikan array `MessageEntity` dari database. Kita konversi ke format yang dimengerti Claude (`Anthropic.MessageParam`):
+TypeORM mengembalikan array `MessageEntity` dari database. Helper `buildAnthropicMessages()` mengonversinya ke format Claude (`Anthropic.MessageParam`):
 
-```typescript
-const messages = history.map((msg) => ({
-  role: msg.role === 'user' ? 'user' : 'assistant',
-  content: msg.content,
-}));
-messages.push({ role: 'user', content: userMessage }); // Tambah pesan baru di akhir
-```
+- Pesan teks biasa → `{ role, content: string }`
+- Pesan user dengan foto (maks. **3 foto terbaru** dalam history) → blok `image` (base64 dari file di folder `media/`) + teks caption jika ada
+- Foto lebih lama di history → hanya teks `content` (mis. `[Foto: ...]`) agar token tidak membengkak
+
+Saat user mengirim foto, file disimpan di `media/{conversationId}/{messageId}.jpg` (volume Docker `media_data` di production) dan path-nya dicatat di kolom `media_path` / `mime_type` di tabel `messages`.
 
 **Tool Use Loop**
 
@@ -437,9 +435,11 @@ Bertanggung jawab atas semua operasi database yang berhubungan dengan percakapan
 | Method | Fungsi |
 |---|---|
 | `getOrCreate(phoneNumber)` | Cari sesi percakapan untuk nomor ini. Jika belum ada, buat baru. |
+| `saveUserImage(conversationId, buffer, mimeType, caption?)` | Simpan pesan user + file gambar ke disk dan database. |
+| `loadMediaBuffer(mediaPath)` | Baca file gambar untuk dikirim ulang ke Claude sebagai konteks. |
 | `getMessages(id, limit)` | Ambil N pesan terakhir dari sesi ini (urut dari lama ke baru). |
 | `addMessage(id, role, content)` | Simpan satu pesan baru ke database. |
-| `resetConversation(phone)` | Hapus semua pesan dari sesi nomor ini (dipanggil oleh `/reset`). |
+| `resetConversation(phone)` | Hapus semua pesan dan folder `media/{conversationId}/` (dipanggil oleh `/reset`). |
 
 **Kenapa setiap nomor dipisah?**
 
@@ -469,7 +469,9 @@ updated_at  → Kapan pesan terakhir
 id              → UUID, primary key
 conversation_id → FK ke tabel conversations
 role            → 'user' atau 'assistant'
-content         → Isi pesan (teks bebas)
+content         → Isi pesan (teks, caption, atau placeholder [Foto])
+media_path      → Path relatif file gambar (nullable)
+mime_type       → image/jpeg, image/png, dll. (nullable)
 created_at      → Waktu pesan dibuat
 ```
 
@@ -610,23 +612,46 @@ Hasilnya: image final tidak punya TypeScript compiler, source `.ts`, atau packag
 
 ### `docker-compose.yml`
 
-Menjalankan dua service sekaligus:
+Hanya menjalankan service **app**. PostgreSQL dijalankan di **docker-compose terpisah** milik Anda (service + volume data Postgres tetap di stack itu).
 
 ```yaml
 services:
-  postgres:          # Database
-    image: postgres:16-alpine
-    healthcheck: ... # Pastikan database siap sebelum app start
-
-  app:               # Bot kita
-    depends_on:
-      postgres:
-        condition: service_healthy  # Tunggu postgres sehat dulu
+  app:
+    environment:
+      DB_HOST: ${DB_HOST}   # dari .env — lihat tabel di bawah
     volumes:
-      - sessions_data:/app/sessions  # Simpan sesi WA agar tidak hilang saat container restart
+      - sessions_data:/app/sessions
+      - media_data:/app/media   # foto untuk konteks AI
+    networks:
+      - whatsapp-bot-net
+
+networks:
+  whatsapp-bot-net:
+    external: true
 ```
 
-Variabel di `docker-compose.yml` dibaca dari file `.env` di direktori yang sama.
+**Menghubungkan app ke Postgres di compose lain**
+
+```bash
+# Buat network bersama (sekali saja)
+docker network create whatsapp-bot-net
+```
+
+| Setup | Nilai `DB_HOST` di `.env` |
+|-------|---------------------------|
+| Kedua stack pakai network `whatsapp-bot-net` | Nama service Postgres di compose DB, mis. `postgres` |
+| Postgres publish ke host (dev Mac) | `host.docker.internal` |
+
+Di compose **database** Anda, tambahkan network yang sama:
+
+```yaml
+networks:
+  default:
+    external: true
+    name: whatsapp-bot-net
+```
+
+Variabel `DB_*` di `docker-compose.yml` dibaca dari file `.env` saat menjalankan compose.
 
 ---
 
@@ -665,6 +690,8 @@ docker-compose -f docker/docker-compose.yml logs -f app
 ```
 
 > Setelah scan QR pertama kali, sesi tersimpan di Docker volume `sessions_data`. Saat container di-restart, bot langsung terhubung tanpa scan QR lagi.
+
+> Foto untuk konteks percakapan tersimpan di volume `media_data`. Pastikan network `whatsapp-bot-net` sudah dibuat sebelum `docker compose up`.
 
 ---
 

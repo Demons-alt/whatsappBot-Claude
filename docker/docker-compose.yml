@@ -6,14 +6,11 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
       PORT: 3000
       NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USERNAME: ${DB_USERNAME:-botuser}
       DB_PASSWORD: ${DB_PASSWORD:-botpassword}
       DB_DATABASE: ${DB_DATABASE:-whatsapp_bot}
@@ -23,8 +20,16 @@ services:
       OPENWEATHER_BASE_URL: ${OPENWEATHER_BASE_URL:-https://api.openweathermap.org/data/2.5}
     volumes:
       - sessions_data:/app/sessions
+      - media_data:/app/media
     ports:
       - "${PORT:-3000}:3000"
+    networks:
+      - whatsapp-bot-net
+
+networks:
+  whatsapp-bot-net:
+    external: true
 
 volumes:
   sessions_data:
+  media_data:

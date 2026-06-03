@@ -10,8 +10,12 @@ dist/
 # WhatsApp session (credentials)
 sessions/
 
+# User-uploaded images for AI context
+media/
+
 # Logs
 *.log
 
 # OS
 .DS_Store
+./sessions

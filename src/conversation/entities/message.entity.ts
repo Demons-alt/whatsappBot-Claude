@@ -25,6 +25,12 @@ export class MessageEntity {
   @Column({ type: 'text' })
   content: string;
 
+  @Column({ name: 'media_path', type: 'varchar', nullable: true })
+  mediaPath: string | null;
+
+  @Column({ name: 'mime_type', type: 'varchar', nullable: true })
+  mimeType: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { ConversationService } from '../conversation/conversation.service';
+import { MessageEntity } from '../conversation/entities/message.entity';
 import { WeatherTool } from './tools/weather.tool';
 import { DateTimeTool } from './tools/datetime.tool';
 import { CurrencyTool } from './tools/currency.tool';
@@ -9,6 +10,9 @@ import { PrayerTool } from './tools/prayer.tool';
 import { HolidayTool } from './tools/holiday.tool';
 
 const BUBBLE_DELIMITER = '|||';
+const MAX_IMAGES_IN_HISTORY = 3;
+
+type ImageMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
 const SYSTEM_PROMPT = `Kamu adalah Chloe yang tengil, agak random namun sesuai konteks, pintar, dan membantu.
 Kamu berbicara dalam bahasa Indonesia secara natural dan santai, tetapi agak mengacaukan beberapa kata.
@@ -53,11 +57,7 @@ export class AIService {
     const conversation = await this.convService.getOrCreate(phoneNumber);
     const history = await this.convService.getMessages(conversation.id, 20);
 
-    const messages: Anthropic.MessageParam[] = history.map((msg) => ({
-      role: msg.role === 'user' ? 'user' : 'assistant',
-      content: msg.content,
-    }));
-
+    const messages = await this.buildAnthropicMessages(history);
     messages.push({ role: 'user', content: userMessage });
     await this.convService.addMessage(conversation.id, 'user', userMessage);
 
@@ -82,33 +82,20 @@ export class AIService {
   async chatWithImage(
     phoneNumber: string,
     imageBuffer: Buffer,
-    mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+    mimeType: ImageMimeType,
     caption?: string,
   ): Promise<string[]> {
     const conversation = await this.convService.getOrCreate(phoneNumber);
     const history = await this.convService.getMessages(conversation.id, 20);
 
-    const messages: Anthropic.MessageParam[] = history.map((msg) => ({
-      role: msg.role === 'user' ? 'user' : 'assistant',
-      content: msg.content,
-    }));
+    const savedMsg = await this.convService.saveUserImage(
+      conversation.id,
+      imageBuffer,
+      mimeType,
+      caption,
+    );
 
-    const userContent: Anthropic.ContentBlockParam[] = [
-      {
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mimeType,
-          data: imageBuffer.toString('base64'),
-        },
-      },
-    ];
-    if (caption) userContent.push({ type: 'text', text: caption });
-
-    messages.push({ role: 'user', content: userContent });
-
-    const storedContent = caption ? `[Foto: ${caption}]` : '[Foto]';
-    await this.convService.addMessage(conversation.id, 'user', storedContent);
+    const messages = await this.buildAnthropicMessages([...history, savedMsg]);
 
     const model =
       this.config.get<string>('anthropic.model') ?? 'claude-haiku-4-5-20251001';
@@ -126,6 +113,72 @@ export class AIService {
       .split(BUBBLE_DELIMITER)
       .map((s) => s.trim())
       .filter(Boolean);
+  }
+
+  private async buildAnthropicMessages(
+    history: MessageEntity[],
+  ): Promise<Anthropic.MessageParam[]> {
+    const imageMessageIds = this.selectRecentImageMessageIds(history);
+
+    const result: Anthropic.MessageParam[] = [];
+    for (const msg of history) {
+      const role = msg.role === 'user' ? 'user' : 'assistant';
+
+      if (
+        role === 'user' &&
+        msg.mediaPath &&
+        msg.mimeType &&
+        imageMessageIds.has(msg.id)
+      ) {
+        const param = await this.userMessageWithImage(msg);
+        if (param) {
+          result.push(param);
+          continue;
+        }
+      }
+
+      result.push({ role, content: msg.content });
+    }
+    return result;
+  }
+
+  private selectRecentImageMessageIds(history: MessageEntity[]): Set<string> {
+    const ids: string[] = [];
+    for (let i = history.length - 1; i >= 0 && ids.length < MAX_IMAGES_IN_HISTORY; i--) {
+      const msg = history[i];
+      if (msg.role === 'user' && msg.mediaPath) {
+        ids.push(msg.id);
+      }
+    }
+    return new Set(ids);
+  }
+
+  private async userMessageWithImage(
+    msg: MessageEntity,
+  ): Promise<Anthropic.MessageParam | null> {
+    if (!msg.mediaPath || !msg.mimeType) return null;
+
+    const buffer = await this.convService.loadMediaBuffer(msg.mediaPath);
+    if (!buffer) return null;
+
+    const mimeType = msg.mimeType as ImageMimeType;
+    const blocks: Anthropic.ContentBlockParam[] = [
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mimeType,
+          data: buffer.toString('base64'),
+        },
+      },
+    ];
+
+    const text = msg.content.trim();
+    if (text && text !== '[Foto]') {
+      blocks.push({ type: 'text', text });
+    }
+
+    return { role: 'user', content: blocks };
   }
 
   private async runModel(
