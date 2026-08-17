@@ -28,10 +28,20 @@ export class WhitelistService {
     return this.adminNumbers.has(phoneNumber);
   }
 
+  getAdminNumbers(): string[] {
+    return [...this.adminNumbers];
+  }
+
   async isAllowed(phoneNumber: string): Promise<boolean> {
     if (this.isAdmin(phoneNumber)) return true;
     const found = await this.repo.findOne({ where: { phoneNumber } });
     return !!found;
+  }
+
+  /** Admin-set label for a whitelisted number, if any — used as a name fallback. */
+  async getLabel(phoneNumber: string): Promise<string | null> {
+    const found = await this.repo.findOne({ where: { phoneNumber } });
+    return found?.label ?? null;
   }
 
   async add(phoneNumber: string, label?: string): Promise<boolean> {

@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ConversationService } from '../conversation/conversation.service';
 import { WhitelistService } from '../whitelist/whitelist.service';
+import { WhitelistEventBus } from '../whitelist/whitelist-events';
 
 @Injectable()
 export class CommandHandler {
   constructor(
     private readonly convService: ConversationService,
     private readonly whitelistService: WhitelistService,
+    private readonly whitelistEventBus: WhitelistEventBus,
   ) {}
 
   async handle(phoneNumber: string, command: string): Promise<string[]> {
@@ -38,6 +40,10 @@ export class CommandHandler {
         if (!number) return ['Format: /whitelist add <nomor> [label]'];
         const label = parts.slice(3).join(' ') || undefined;
         const added = await this.whitelistService.add(number, label);
+        if (added) {
+          // Lets WhatsappService know it can now reply to that number's pending message.
+          this.whitelistEventBus.emit('approved', { phoneNumber: number });
+        }
         return [
           added
             ? `✅ Nomor ${number} ditambahkan ke whitelist.`

@@ -8,6 +8,6 @@ import { MediaStorage } from './media.storage';
 @Module({
   imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity])],
   providers: [ConversationService, MediaStorage],
-  exports: [ConversationService],
+  exports: [ConversationService, MediaStorage],
 })
 export class ConversationModule {}
