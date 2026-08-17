@@ -29,7 +29,10 @@ export class ConversationService {
     return conv;
   }
 
-  async getMessages(conversationId: string, limit = 20): Promise<MessageEntity[]> {
+  async getMessages(
+    conversationId: string,
+    limit = 20,
+  ): Promise<MessageEntity[]> {
     const msgs = await this.msgRepo.find({
       where: { conversation: { id: conversationId } },
       order: { createdAt: 'DESC' },
@@ -84,6 +87,27 @@ export class ConversationService {
 
   loadMediaBuffer(mediaPath: string): Promise<Buffer | null> {
     return this.mediaStorage.read(mediaPath);
+  }
+
+  /**
+   * Conversations whose most recent message is still from the user — i.e. we never
+   * got around to replying (crash, restart, bug, ...). Used for the startup catch-up.
+   */
+  async findUnansweredConversations(): Promise<ConversationEntity[]> {
+    const conversations = await this.convRepo.find();
+    const unanswered: ConversationEntity[] = [];
+
+    for (const conv of conversations) {
+      const lastMsg = await this.msgRepo.findOne({
+        where: { conversation: { id: conv.id } },
+        order: { createdAt: 'DESC' },
+      });
+      if (lastMsg?.role === 'user') {
+        unanswered.push(conv);
+      }
+    }
+
+    return unanswered;
   }
 
   async resetConversation(phoneNumber: string): Promise<void> {

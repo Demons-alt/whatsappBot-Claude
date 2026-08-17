@@ -106,6 +106,31 @@ export class AIService {
     return this.splitBubbles(textContent);
   }
 
+  /**
+   * Replies to a conversation whose last stored message is already from the user
+   * (e.g. the process crashed/restarted before answering) — reuses that message as
+   * the prompt instead of appending a new one, since nothing new was actually sent.
+   */
+  async answerPending(phoneNumber: string): Promise<string[]> {
+    const conversation = await this.convService.getOrCreate(phoneNumber);
+    const history = await this.convService.getMessages(conversation.id, 20);
+
+    if (history.length === 0 || history[history.length - 1].role !== 'user') {
+      return [];
+    }
+
+    const messages = await this.buildNormalizedMessages(history);
+
+    const textContent = await this.runChat(messages);
+    await this.convService.addMessage(
+      conversation.id,
+      'assistant',
+      textContent,
+    );
+
+    return this.splitBubbles(textContent);
+  }
+
   private runChat(messages: NormalizedMessage[]): Promise<string> {
     return this.llmProvider.chat({
       systemPrompt: SYSTEM_PROMPT,

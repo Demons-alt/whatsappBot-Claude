@@ -38,6 +38,7 @@ export class HermesProvider implements LlmProvider {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly model: string;
+  private readonly maxTokens: number;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('hermes.apiKey') ?? '';
@@ -45,6 +46,7 @@ export class HermesProvider implements LlmProvider {
       this.config.get<string>('hermes.baseUrl') ?? 'http://10.20.30.50:8645/v1';
     this.model =
       this.config.get<string>('hermes.model') ?? 'upstage/solar-pro4:free';
+    this.maxTokens = this.config.get<number>('hermes.maxTokens') ?? 2048;
   }
 
   async chat({
@@ -104,7 +106,7 @@ export class HermesProvider implements LlmProvider {
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: 1024,
+        max_tokens: this.maxTokens,
         messages,
         tools: tools.length ? tools : undefined,
       }),

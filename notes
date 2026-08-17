@@ -1,1 +1,18 @@
 claude --resume "whatsapp-bot-mvp-nestjs"
+
+Deploy:
+# 1. Configure environment
+cp .env.example .env
+# edit .env with real values — must include DB_HOST pointing at your Postgres stack
+
+# 2. Build with no cache (forces every layer — npm ci, npm run build, etc. — to re-run from scratch)
+docker compose -f docker/docker-compose.yml build --no-cache
+
+# 3. Start (uses the image just built — no rebuild)
+docker compose -f docker/docker-compose.yml up -d
+
+# 4. Watch logs (scan the QR code here on first run)
+docker compose -f docker/docker-compose.yml logs -f app
+
+If you also want the base node:20-alpine image itself re-pulled (not just reused from your local Docker cache), add --pull to the build step:
+docker compose -f docker/docker-compose.yml build --no-cache --pull

@@ -16,6 +16,10 @@ const STICKER_FALLBACK_TEXT =
   'Hehe, aku belum ngerti kalau dikirim stiker 🙈 Coba tulis pesannya pakai teks ya!';
 const MAX_TRACKED_FORWARDS = 300;
 
+// Jeda antar-obrolan saat catch-up startup, biar pesan keluarnya nggak berondong
+// ke banyak nomor sekaligus.
+const STARTUP_CATCHUP_DELAY_MS = 3000;
+
 // Pesan yang tiba lebih tua dari ini (dibanding waktu sekarang) dianggap "nyangkut"
 // selagi bot offline — bukan cuma delay jaringan biasa.
 const OFFLINE_APOLOGY_THRESHOLD_MS = 5 * 60 * 1000;
@@ -29,7 +33,7 @@ const OFFLINE_APOLOGY_LINES = [
 // Tunggu selama ini sejak pesan teks terakhir sebelum benar-benar membalas — biar
 // beberapa pesan beruntun dari orang yang sama dianggap satu obrolan, bukan dibalas
 // satu-satu.
-const TEXT_BATCH_DEBOUNCE_MS = 20_00;
+const TEXT_BATCH_DEBOUNCE_MS = 5_000;
 
 interface PendingTextBatch {
   parts: string[];
@@ -78,6 +82,9 @@ export class WhatsappService implements OnModuleInit {
 
   /** Buffered text messages per number, waiting out the debounce before one combined reply. */
   private readonly textBatches = new Map<string, PendingTextBatch>();
+
+  /** Ensures the startup catch-up only runs once per process, not on every reconnect. */
+  private hasCheckedUnanswered = false;
 
   constructor(
     private readonly messageService: MessageService,
@@ -129,6 +136,12 @@ export class WhatsappService implements OnModuleInit {
         this.logger.log('✅ Bot WhatsApp terhubung!');
         // Sesi baru — beri kesempatan minta maaf lagi kalau ada nomor yang tertunda.
         this.apologizedThisSession.clear();
+
+        // Hanya sekali per start-up proses, bukan setiap kali reconnect.
+        if (!this.hasCheckedUnanswered) {
+          this.hasCheckedUnanswered = true;
+          void this.replyToUnansweredChats();
+        }
       }
     });
 
@@ -567,6 +580,40 @@ export class WhatsappService implements OnModuleInit {
         `Gagal memproses pesan pending untuk ${phoneNumber}:`,
         err,
       );
+    }
+  }
+
+  /**
+   * Runs once, right after the first successful connect: finds chats where we owe
+   * a reply (last stored message is still from the user — crash, restart, bug, ...)
+   * and answers each one.
+   */
+  private async replyToUnansweredChats(): Promise<void> {
+    let results: Awaited<ReturnType<MessageService['replyToUnansweredChats']>>;
+    try {
+      results = await this.messageService.replyToUnansweredChats();
+    } catch (err) {
+      this.logger.error('Gagal memeriksa chat yang belum dibalas:', err);
+      return;
+    }
+
+    if (results.length === 0) return;
+
+    this.logger.log(
+      `Membalas ${results.length} chat yang tertunda dari sebelumnya...`,
+    );
+
+    for (const { phoneNumber, replies } of results) {
+      const jid = `${phoneNumber}@s.whatsapp.net`;
+      try {
+        await this.sendBubbles(jid, replies);
+      } catch (err) {
+        this.logger.error(
+          `Gagal mengirim balasan tertunda ke ${phoneNumber}:`,
+          err,
+        );
+      }
+      await this.delay(STARTUP_CATCHUP_DELAY_MS);
     }
   }
 

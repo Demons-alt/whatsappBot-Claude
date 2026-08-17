@@ -27,6 +27,10 @@ export default () => ({
     apiKey: process.env.HERMES_API_KEY ?? '',
     baseUrl: process.env.HERMES_BASE_URL ?? 'http://10.20.30.50:8645/v1',
     model: process.env.HERMES_MODEL ?? 'upstage/solar-pro4:free',
+    // Reasoning models (e.g. stepfun/step-3.7-flash) spend a chunk of this budget on
+    // hidden chain-of-thought before the visible reply — too low and you get an
+    // empty/truncated response. Bump this via env if you switch to one of those.
+    maxTokens: parseInt(process.env.HERMES_MAX_TOKENS ?? '2048', 10),
   },
   openweather: {
     apiKey: process.env.OPENWEATHER_API_KEY ?? '',

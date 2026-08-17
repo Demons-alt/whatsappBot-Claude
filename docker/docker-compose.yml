@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   app:
     build:
@@ -14,15 +12,20 @@ services:
       DB_USERNAME: ${DB_USERNAME:-botuser}
       DB_PASSWORD: ${DB_PASSWORD:-botpassword}
       DB_DATABASE: ${DB_DATABASE:-whatsapp_bot}
+      ADMIN_NUMBERS: ${ADMIN_NUMBERS}
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-haiku-4-5-20251001}
+      HERMES_API_KEY: ${HERMES_API_KEY}
+      HERMES_BASE_URL: ${HERMES_BASE_URL:-http://10.20.30.50:8645/v1}
+      HERMES_MODEL: ${HERMES_MODEL:-upstage/solar-pro4:free}
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
       OPENWEATHER_BASE_URL: ${OPENWEATHER_BASE_URL:-https://api.openweathermap.org/data/2.5}
     volumes:
       - sessions_data:/app/sessions
       - media_data:/app/media
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}"
     networks:
       - whatsapp-bot-net
 
