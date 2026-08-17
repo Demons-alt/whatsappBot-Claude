@@ -1,6 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Anthropic from '@anthropic-ai/sdk';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConversationService } from '../conversation/conversation.service';
 import { MessageEntity } from '../conversation/entities/message.entity';
 import { WeatherTool } from './tools/weather.tool';
@@ -8,6 +6,12 @@ import { DateTimeTool } from './tools/datetime.tool';
 import { CurrencyTool } from './tools/currency.tool';
 import { PrayerTool } from './tools/prayer.tool';
 import { HolidayTool } from './tools/holiday.tool';
+import { LLM_PROVIDER } from './providers/llm-provider.interface';
+import type {
+  LlmProvider,
+  NormalizedContentBlock,
+  NormalizedMessage,
+} from './providers/llm-provider.interface';
 
 const BUBBLE_DELIMITER = '|||';
 const MAX_IMAGES_IN_HISTORY = 3;
@@ -26,7 +30,6 @@ Jika pertanyaan sederhana, cukup satu bubble saja.`;
 
 @Injectable()
 export class AIService {
-  private readonly client: Anthropic;
   private readonly logger = new Logger(AIService.name);
 
   private get tools() {
@@ -40,43 +43,27 @@ export class AIService {
   }
 
   constructor(
-    private readonly config: ConfigService,
+    @Inject(LLM_PROVIDER) private readonly llmProvider: LlmProvider,
     private readonly convService: ConversationService,
     private readonly weatherTool: WeatherTool,
     private readonly dateTimeTool: DateTimeTool,
     private readonly currencyTool: CurrencyTool,
     private readonly prayerTool: PrayerTool,
     private readonly holidayTool: HolidayTool,
-  ) {
-    this.client = new Anthropic({
-      apiKey: this.config.get<string>('anthropic.apiKey'),
-    });
-  }
+  ) {}
 
   async chat(phoneNumber: string, userMessage: string): Promise<string[]> {
     const conversation = await this.convService.getOrCreate(phoneNumber);
     const history = await this.convService.getMessages(conversation.id, 20);
 
-    const messages = await this.buildAnthropicMessages(history);
+    const messages = await this.buildNormalizedMessages(history);
     messages.push({ role: 'user', content: userMessage });
     await this.convService.addMessage(conversation.id, 'user', userMessage);
 
-    const model =
-      this.config.get<string>('anthropic.model') ?? 'claude-haiku-4-5-20251001';
-
-    const response = await this.runModel(messages, model);
-
-    const textContent = response.content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-
+    const textContent = await this.runChat(messages);
     await this.convService.addMessage(conversation.id, 'assistant', textContent);
 
-    return textContent
-      .split(BUBBLE_DELIMITER)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return this.splitBubbles(textContent);
   }
 
   async chatWithImage(
@@ -95,32 +82,36 @@ export class AIService {
       caption,
     );
 
-    const messages = await this.buildAnthropicMessages([...history, savedMsg]);
+    const messages = await this.buildNormalizedMessages([...history, savedMsg]);
 
-    const model =
-      this.config.get<string>('anthropic.model') ?? 'claude-haiku-4-5-20251001';
-
-    const response = await this.runModel(messages, model);
-
-    const textContent = response.content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-
+    const textContent = await this.runChat(messages);
     await this.convService.addMessage(conversation.id, 'assistant', textContent);
 
-    return textContent
+    return this.splitBubbles(textContent);
+  }
+
+  private runChat(messages: NormalizedMessage[]): Promise<string> {
+    return this.llmProvider.chat({
+      systemPrompt: SYSTEM_PROMPT,
+      messages,
+      tools: this.tools,
+      executeTool: (name, input) => this.executeTool(name, input),
+    });
+  }
+
+  private splitBubbles(text: string): string[] {
+    return text
       .split(BUBBLE_DELIMITER)
       .map((s) => s.trim())
       .filter(Boolean);
   }
 
-  private async buildAnthropicMessages(
+  private async buildNormalizedMessages(
     history: MessageEntity[],
-  ): Promise<Anthropic.MessageParam[]> {
+  ): Promise<NormalizedMessage[]> {
     const imageMessageIds = this.selectRecentImageMessageIds(history);
 
-    const result: Anthropic.MessageParam[] = [];
+    const result: NormalizedMessage[] = [];
     for (const msg of history) {
       const role = msg.role === 'user' ? 'user' : 'assistant';
 
@@ -130,9 +121,9 @@ export class AIService {
         msg.mimeType &&
         imageMessageIds.has(msg.id)
       ) {
-        const param = await this.userMessageWithImage(msg);
-        if (param) {
-          result.push(param);
+        const normalized = await this.userMessageWithImage(msg);
+        if (normalized) {
+          result.push(normalized);
           continue;
         }
       }
@@ -153,24 +144,14 @@ export class AIService {
     return new Set(ids);
   }
 
-  private async userMessageWithImage(
-    msg: MessageEntity,
-  ): Promise<Anthropic.MessageParam | null> {
+  private async userMessageWithImage(msg: MessageEntity): Promise<NormalizedMessage | null> {
     if (!msg.mediaPath || !msg.mimeType) return null;
 
     const buffer = await this.convService.loadMediaBuffer(msg.mediaPath);
     if (!buffer) return null;
 
-    const mimeType = msg.mimeType as ImageMimeType;
-    const blocks: Anthropic.ContentBlockParam[] = [
-      {
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mimeType,
-          data: buffer.toString('base64'),
-        },
-      },
+    const blocks: NormalizedContentBlock[] = [
+      { type: 'image', mimeType: msg.mimeType, base64: buffer.toString('base64') },
     ];
 
     const text = msg.content.trim();
@@ -181,59 +162,19 @@ export class AIService {
     return { role: 'user', content: blocks };
   }
 
-  private async runModel(
-    messages: Anthropic.MessageParam[],
-    model: string,
-  ): Promise<Anthropic.Message> {
-    let response = await this.client.messages.create({
-      model,
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      tools: this.tools,
-      messages,
-    });
+  private async executeTool(name: string, input: unknown): Promise<string> {
+    this.logger.log(`Tool call: ${name}(${JSON.stringify(input)})`);
 
-    while (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
-      );
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
-        toolUseBlocks.map(async (block) => ({
-          type: 'tool_result' as const,
-          tool_use_id: block.id,
-          content: await this.executeTool(block),
-        })),
-      );
-
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
-
-      response = await this.client.messages.create({
-        model,
-        max_tokens: 1024,
-        system: SYSTEM_PROMPT,
-        tools: this.tools,
-        messages,
-      });
-    }
-
-    return response;
-  }
-
-  private async executeTool(block: Anthropic.ToolUseBlock): Promise<string> {
-    this.logger.log(`Tool call: ${block.name}(${JSON.stringify(block.input)})`);
-
-    switch (block.name) {
+    switch (name) {
       case 'get_weather': {
-        const { city } = block.input as { city: string };
+        const { city } = input as { city: string };
         return this.weatherTool.execute(city);
       }
       case 'get_datetime': {
         return this.dateTimeTool.execute();
       }
       case 'get_currency': {
-        const { from, to, amount } = block.input as {
+        const { from, to, amount } = input as {
           from: string;
           to: string;
           amount?: number;
@@ -241,18 +182,18 @@ export class AIService {
         return this.currencyTool.execute(from, to, amount);
       }
       case 'get_prayer_times': {
-        const { city, country } = block.input as {
+        const { city, country } = input as {
           city: string;
           country?: string;
         };
         return this.prayerTool.execute(city, country);
       }
       case 'get_holiday': {
-        const { date } = block.input as { date?: string };
+        const { date } = input as { date?: string };
         return this.holidayTool.execute(date);
       }
       default:
-        return `Tool "${block.name}" tidak dikenali.`;
+        return `Tool "${name}" tidak dikenali.`;
     }
   }
 }

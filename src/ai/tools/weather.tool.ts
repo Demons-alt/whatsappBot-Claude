@@ -8,13 +8,15 @@ const GEO_API = 'https://api.openweathermap.org/geo/1.0/direct';
 export class WeatherTool {
   readonly definition = {
     name: 'get_weather',
-    description: 'Mendapatkan informasi cuaca terkini untuk sebuah kota. Gunakan tool ini ketika pengguna menanyakan cuaca suatu kota.',
+    description:
+      'Mendapatkan informasi cuaca terkini untuk sebuah kota. Gunakan tool ini ketika pengguna menanyakan cuaca suatu kota.',
     input_schema: {
       type: 'object' as const,
       properties: {
         city: {
           type: 'string',
-          description: 'Nama kota dalam bahasa Inggris (contoh: Jakarta, Surabaya, Bandung)',
+          description:
+            'Nama kota dalam bahasa Inggris (contoh: Jakarta, Surabaya, Bandung)',
         },
       },
       required: ['city'],
@@ -51,14 +53,24 @@ export class WeatherTool {
       }
 
       const found = locations[0];
-      const label = found.state ? `${found.name}, ${found.state}, ${found.country}` : `${found.name}, ${found.country}`;
+      const label = found.state
+        ? `${found.name}, ${found.state}, ${found.country}`
+        : `${found.name}, ${found.country}`;
 
       const weatherRes = await axios.get(`${baseUrl}/weather`, {
-        params: { lat: found.lat, lon: found.lon, appid: apiKey, units: 'metric', lang: 'id' },
+        params: {
+          lat: found.lat,
+          lon: found.lon,
+          appid: apiKey,
+          units: 'metric',
+          lang: 'id',
+        },
       });
 
-      return `(Lokasi "${city}" tidak ditemukan, menampilkan cuaca untuk ${label} yang paling mendekati)\n\n` +
-        this.formatWeather(weatherRes.data);
+      return (
+        `(Lokasi "${city}" tidak ditemukan, menampilkan cuaca untuk ${label} yang paling mendekati)\n\n` +
+        this.formatWeather(weatherRes.data)
+      );
     } catch {
       return `Lokasi "${city}" tidak ditemukan. Coba cek ejaan atau gunakan nama kota lain.`;
     }
@@ -83,7 +95,8 @@ export class WeatherTool {
   }
 
   private describeHumidity(humidity: number): string {
-    if (humidity < 40) return 'udara kering, kulit mungkin terasa sedikit kering';
+    if (humidity < 40)
+      return 'udara kering, kulit mungkin terasa sedikit kering';
     if (humidity < 60) return 'udara nyaman, tidak terlalu lembap';
     if (humidity < 75) return 'agak lembap, masih cukup nyaman';
     if (humidity < 85) return 'lembap, keringat terasa lebih lambat kering';

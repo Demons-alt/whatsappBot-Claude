@@ -14,11 +14,13 @@ export class CurrencyTool {
       properties: {
         from: {
           type: 'string',
-          description: 'Kode mata uang asal dalam format ISO 4217 (contoh: USD, SGD, EUR, JPY)',
+          description:
+            'Kode mata uang asal dalam format ISO 4217 (contoh: USD, SGD, EUR, JPY)',
         },
         to: {
           type: 'string',
-          description: 'Kode mata uang tujuan dalam format ISO 4217 (contoh: IDR, USD, EUR)',
+          description:
+            'Kode mata uang tujuan dalam format ISO 4217 (contoh: IDR, USD, EUR)',
         },
         amount: {
           type: 'number',
