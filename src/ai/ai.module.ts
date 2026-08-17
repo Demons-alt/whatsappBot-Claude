@@ -9,7 +9,7 @@ import { HolidayTool } from './tools/holiday.tool';
 import { ConversationModule } from '../conversation/conversation.module';
 import { LLM_PROVIDER } from './providers/llm-provider.interface';
 import { AnthropicProvider } from './providers/anthropic.provider';
-import { HermesProvider } from './providers/hermes.provider';
+import { ChatCombosProvider } from './providers/chat-combos.provider';
 
 @Module({
   imports: [ConversationModule],
@@ -21,16 +21,18 @@ import { HermesProvider } from './providers/hermes.provider';
     PrayerTool,
     HolidayTool,
     AnthropicProvider,
-    HermesProvider,
+    ChatCombosProvider,
     {
       provide: LLM_PROVIDER,
       useFactory: (
         config: ConfigService,
         anthropic: AnthropicProvider,
-        hermes: HermesProvider,
+        chatCombos: ChatCombosProvider,
       ) =>
-        config.get<string>('ai.provider') === 'hermes' ? hermes : anthropic,
-      inject: [ConfigService, AnthropicProvider, HermesProvider],
+        config.get<string>('ai.provider') === 'chat-combos'
+          ? chatCombos
+          : anthropic,
+      inject: [ConfigService, AnthropicProvider, ChatCombosProvider],
     },
   ],
   exports: [AIService],

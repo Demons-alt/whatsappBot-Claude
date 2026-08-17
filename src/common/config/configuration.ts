@@ -14,23 +14,22 @@ export default () => ({
     adminNumbers: process.env.ADMIN_NUMBERS ?? '',
   },
   ai: {
-    // 'anthropic' (default) or 'hermes' — picks which LlmProvider the whole bot uses.
+    // 'anthropic' (default) or 'chat-combos' — picks which LlmProvider the whole bot uses.
     provider: process.env.AI_PROVIDER ?? 'anthropic',
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
     model: process.env.CLAUDE_MODEL ?? 'claude-haiku-4-5-20251001',
   },
-  hermes: {
-    // Internal Hermes gateway — OpenAI-compatible chat completions, but auth is the
-    // raw key with no "Bearer " prefix. Model id is whatever the gateway currently routes.
-    apiKey: process.env.HERMES_API_KEY ?? '',
-    baseUrl: process.env.HERMES_BASE_URL ?? 'http://10.20.30.50:8645/v1',
-    model: process.env.HERMES_MODEL ?? 'upstage/solar-pro4:free',
-    // Reasoning models (e.g. stepfun/step-3.7-flash) spend a chunk of this budget on
-    // hidden chain-of-thought before the visible reply — too low and you get an
-    // empty/truncated response. Bump this via env if you switch to one of those.
-    maxTokens: parseInt(process.env.HERMES_MAX_TOKENS ?? '2048', 10),
+  chatCombos: {
+    // Internal ChatCombos gateway — OpenAI-compatible chat completions with standard
+    // Bearer auth. Model id is whatever the gateway currently routes to.
+    apiKey: process.env.CHAT_COMBOS_API_KEY ?? '',
+    baseUrl: process.env.CHAT_COMBOS_BASE_URL ?? 'http://10.20.30.50:20128/v1',
+    model: process.env.CHAT_COMBOS_MODEL ?? 'chat-combos',
+    // Headroom for reasoning-style models the gateway might route to — hidden
+    // chain-of-thought eats into the same budget as the visible reply.
+    maxTokens: parseInt(process.env.CHAT_COMBOS_MAX_TOKENS ?? '2048', 10),
   },
   openweather: {
     apiKey: process.env.OPENWEATHER_API_KEY ?? '',

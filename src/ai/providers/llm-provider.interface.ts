@@ -1,5 +1,5 @@
 /**
- * Provider-agnostic chat contract. Each concrete LLM provider (Anthropic, Hermes, ...)
+ * Provider-agnostic chat contract. Each concrete LLM provider (Anthropic, ChatCombos, ...)
  * translates these normalized shapes into its own API format and back.
  */
 

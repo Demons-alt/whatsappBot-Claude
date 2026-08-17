@@ -28,25 +28,25 @@ interface OpenAiTool {
 }
 
 /**
- * Talks to the internal Hermes gateway through an OpenAI-compatible chat
- * completions endpoint (same request/response shape as OpenAI/OpenRouter,
- * so no extra SDK is needed) — except auth is the raw key with no "Bearer " prefix.
+ * Talks to the internal ChatCombos gateway through an OpenAI-compatible chat
+ * completions endpoint (same request/response shape as OpenAI/OpenRouter, so no
+ * extra SDK is needed) — auth is a standard Bearer token.
  */
 @Injectable()
-export class HermesProvider implements LlmProvider {
-  private readonly logger = new Logger(HermesProvider.name);
+export class ChatCombosProvider implements LlmProvider {
+  private readonly logger = new Logger(ChatCombosProvider.name);
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly model: string;
   private readonly maxTokens: number;
 
   constructor(private readonly config: ConfigService) {
-    this.apiKey = this.config.get<string>('hermes.apiKey') ?? '';
+    this.apiKey = this.config.get<string>('chatCombos.apiKey') ?? '';
     this.baseUrl =
-      this.config.get<string>('hermes.baseUrl') ?? 'http://10.20.30.50:8645/v1';
-    this.model =
-      this.config.get<string>('hermes.model') ?? 'upstage/solar-pro4:free';
-    this.maxTokens = this.config.get<number>('hermes.maxTokens') ?? 2048;
+      this.config.get<string>('chatCombos.baseUrl') ??
+      'http://10.20.30.50:20128/v1';
+    this.model = this.config.get<string>('chatCombos.model') ?? 'chat-combos';
+    this.maxTokens = this.config.get<number>('chatCombos.maxTokens') ?? 2048;
   }
 
   async chat({
@@ -101,8 +101,7 @@ export class HermesProvider implements LlmProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // The internal Hermes gateway expects the raw key, not a "Bearer " prefix.
-        Authorization: this.apiKey,
+        Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
         model: this.model,
@@ -114,8 +113,8 @@ export class HermesProvider implements LlmProvider {
 
     if (!response.ok) {
       const errText = await response.text();
-      this.logger.error(`Hermes API error ${response.status}: ${errText}`);
-      throw new Error(`Hermes API error ${response.status}`);
+      this.logger.error(`ChatCombos API error ${response.status}: ${errText}`);
+      throw new Error(`ChatCombos API error ${response.status}`);
     }
 
     const data = (await response.json()) as {
