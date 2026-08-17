@@ -33,7 +33,7 @@ const OFFLINE_APOLOGY_LINES = [
 // Tunggu selama ini sejak pesan teks terakhir sebelum benar-benar membalas — biar
 // beberapa pesan beruntun dari orang yang sama dianggap satu obrolan, bukan dibalas
 // satu-satu.
-const TEXT_BATCH_DEBOUNCE_MS = 5_000;
+const TEXT_BATCH_DEBOUNCE_MS = 5_00;
 
 interface PendingTextBatch {
   parts: string[];
