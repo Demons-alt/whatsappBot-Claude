@@ -8,6 +8,11 @@ export default () => ({
     password: process.env.DB_PASSWORD ?? 'botpassword',
     database: process.env.DB_DATABASE ?? 'whatsapp_bot',
   },
+  whitelist: {
+    // Comma-separated phone numbers (no "+", e.g. 628123456789) that bypass the DB
+    // whitelist entirely — needed to bootstrap/manage the whitelist via chat commands.
+    adminNumbers: process.env.ADMIN_NUMBERS ?? '',
+  },
   ai: {
     // 'anthropic' (default) or 'hermes' — picks which LlmProvider the whole bot uses.
     provider: process.env.AI_PROVIDER ?? 'anthropic',

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration from './common/config/configuration';
 import { ConversationEntity } from './conversation/entities/conversation.entity';
 import { MessageEntity } from './conversation/entities/message.entity';
+import { WhitelistEntity } from './whitelist/entities/whitelist.entity';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -21,7 +22,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
         username: config.get('database.username'),
         password: config.get('database.password'),
         database: config.get('database.database'),
-        entities: [ConversationEntity, MessageEntity],
+        entities: [ConversationEntity, MessageEntity, WhitelistEntity],
         synchronize: true,
       }),
     }),

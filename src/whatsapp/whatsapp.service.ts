@@ -11,6 +11,7 @@ const SUPPORTED_MIMES = new Set<string>(['image/jpeg', 'image/png', 'image/gif',
 import { Boom } from '@hapi/boom';
 import * as qrcode from 'qrcode-terminal';
 import { MessageService } from '../message/message.service';
+import { WhitelistService } from '../whitelist/whitelist.service';
 
 const BUBBLE_DELAY_MS = 1000;
 
@@ -19,7 +20,10 @@ export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
   private sock: ReturnType<typeof makeWASocket> | null = null;
 
-  constructor(private readonly messageService: MessageService) {}
+  constructor(
+    private readonly messageService: MessageService,
+    private readonly whitelistService: WhitelistService,
+  ) {}
 
   async onModuleInit() {
     await this.connect();
@@ -76,6 +80,12 @@ export class WhatsappService implements OnModuleInit {
           '';
 
         const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+
+        // Nomor tidak ada di whitelist — abaikan sepenuhnya, tidak ada balasan.
+        if (!(await this.whitelistService.isAllowed(phoneNumber))) {
+          this.logger.warn(`Nomor ${phoneNumber} tidak ada di whitelist, pesan diabaikan.`);
+          continue;
+        }
 
         try {
           let replies: string[];
