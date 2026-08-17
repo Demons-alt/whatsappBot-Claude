@@ -4,23 +4,16 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     restart: unless-stopped
+    # Resolved relative to this file's directory (docker/), so this finds the repo-root
+    # .env regardless of the directory `docker compose` is invoked from — unlike the
+    # `--env-file` CLI flag, which is resolved relative to the current directory instead.
+    env_file:
+      - ../.env
     environment:
+      # Deployment-fixed values — always production inside the container, no matter
+      # what NODE_ENV happens to be set to in the local .env used for `npm run start:dev`.
       PORT: 3000
       NODE_ENV: production
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_USERNAME: ${DB_USERNAME:-botuser}
-      DB_PASSWORD: ${DB_PASSWORD:-botpassword}
-      DB_DATABASE: ${DB_DATABASE:-whatsapp_bot}
-      ADMIN_NUMBERS: ${ADMIN_NUMBERS}
-      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-haiku-4-5-20251001}
-      CHAT_COMBOS_API_KEY: ${CHAT_COMBOS_API_KEY}
-      CHAT_COMBOS_BASE_URL: ${CHAT_COMBOS_BASE_URL:-http://10.20.30.50:20128/v1}
-      CHAT_COMBOS_MODEL: ${CHAT_COMBOS_MODEL:-chat-combos}
-      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
-      OPENWEATHER_BASE_URL: ${OPENWEATHER_BASE_URL:-https://api.openweathermap.org/data/2.5}
     volumes:
       - sessions_data:/app/sessions
       - media_data:/app/media
