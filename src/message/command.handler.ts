@@ -17,7 +17,9 @@ export class CommandHandler {
     switch (cmd) {
       case '/reset':
         await this.convService.resetConversation(phoneNumber);
-        return ['✅ Riwayat percakapan kamu sudah direset.\nKita mulai dari awal ya! 😊'];
+        return [
+          '✅ Riwayat percakapan kamu sudah direset.\nKita mulai dari awal ya! 😊',
+        ];
 
       case '/whitelist':
         if (!this.whitelistService.isAdmin(phoneNumber)) {
@@ -26,7 +28,9 @@ export class CommandHandler {
         return this.handleWhitelistCommand(command);
 
       default:
-        return [`❓ Command "${cmd}" tidak dikenali.\n\nCommand yang tersedia:\n• /reset — hapus riwayat percakapan`];
+        return [
+          `❓ Command "${cmd}" tidak dikenali.\n\nCommand yang tersedia:\n• /reset — hapus riwayat percakapan`,
+        ];
     }
   }
 

@@ -69,7 +69,11 @@ export class AIService {
     await this.convService.addMessage(conversation.id, 'user', userMessage);
 
     const textContent = await this.runChat(messages);
-    await this.convService.addMessage(conversation.id, 'assistant', textContent);
+    await this.convService.addMessage(
+      conversation.id,
+      'assistant',
+      textContent,
+    );
 
     return this.splitBubbles(textContent);
   }
@@ -93,7 +97,11 @@ export class AIService {
     const messages = await this.buildNormalizedMessages([...history, savedMsg]);
 
     const textContent = await this.runChat(messages);
-    await this.convService.addMessage(conversation.id, 'assistant', textContent);
+    await this.convService.addMessage(
+      conversation.id,
+      'assistant',
+      textContent,
+    );
 
     return this.splitBubbles(textContent);
   }
@@ -143,7 +151,11 @@ export class AIService {
 
   private selectRecentImageMessageIds(history: MessageEntity[]): Set<string> {
     const ids: string[] = [];
-    for (let i = history.length - 1; i >= 0 && ids.length < MAX_IMAGES_IN_HISTORY; i--) {
+    for (
+      let i = history.length - 1;
+      i >= 0 && ids.length < MAX_IMAGES_IN_HISTORY;
+      i--
+    ) {
       const msg = history[i];
       if (msg.role === 'user' && msg.mediaPath) {
         ids.push(msg.id);
@@ -152,14 +164,20 @@ export class AIService {
     return new Set(ids);
   }
 
-  private async userMessageWithImage(msg: MessageEntity): Promise<NormalizedMessage | null> {
+  private async userMessageWithImage(
+    msg: MessageEntity,
+  ): Promise<NormalizedMessage | null> {
     if (!msg.mediaPath || !msg.mimeType) return null;
 
     const buffer = await this.convService.loadMediaBuffer(msg.mediaPath);
     if (!buffer) return null;
 
     const blocks: NormalizedContentBlock[] = [
-      { type: 'image', mimeType: msg.mimeType, base64: buffer.toString('base64') },
+      {
+        type: 'image',
+        mimeType: msg.mimeType,
+        base64: buffer.toString('base64'),
+      },
     ];
 
     const text = msg.content.trim();

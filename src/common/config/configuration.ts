@@ -31,6 +31,7 @@ export default () => ({
   openweather: {
     apiKey: process.env.OPENWEATHER_API_KEY ?? '',
     baseUrl:
-      process.env.OPENWEATHER_BASE_URL ?? 'https://api.openweathermap.org/data/2.5',
+      process.env.OPENWEATHER_BASE_URL ??
+      'https://api.openweathermap.org/data/2.5',
   },
 });

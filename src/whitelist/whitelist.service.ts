@@ -47,7 +47,9 @@ export class WhitelistService {
   async add(phoneNumber: string, label?: string): Promise<boolean> {
     const existing = await this.repo.findOne({ where: { phoneNumber } });
     if (existing) return false;
-    await this.repo.save(this.repo.create({ phoneNumber, label: label ?? null }));
+    await this.repo.save(
+      this.repo.create({ phoneNumber, label: label ?? null }),
+    );
     return true;
   }
 
