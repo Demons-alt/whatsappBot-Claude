@@ -11,6 +11,7 @@ import { LLM_PROVIDER } from './providers/llm-provider.interface';
 import { AnthropicProvider } from './providers/anthropic.provider';
 import { ChatCombosProvider } from './providers/chat-combos.provider';
 import { ImageGenerationTool } from './tools/image-generation.tool';
+import { ImagePromptService } from './image-prompt/image-prompt.service';
 
 @Module({
   imports: [ConversationModule],
@@ -22,6 +23,7 @@ import { ImageGenerationTool } from './tools/image-generation.tool';
     PrayerTool,
     HolidayTool,
     ImageGenerationTool,
+    ImagePromptService,
     AnthropicProvider,
     ChatCombosProvider,
     {

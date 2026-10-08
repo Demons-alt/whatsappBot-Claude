@@ -14,11 +14,18 @@ import type {
 } from './providers/llm-provider.interface';
 import { ImageGenerationTool } from './tools/image-generation.tool';
 import { BotResponse, GeneratedImage } from '../message/outgoing-message';
+import {
+  IMAGE_PROMPT_WORKFLOW,
+  ImageAspectRatio,
+  ImageResolution,
+  ImageStyle,
+} from './image-prompt/image-prompt.service';
 
 const BUBBLE_DELIMITER = '|||';
 const MAX_IMAGES_IN_HISTORY = 3;
 
 type ImageMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+type SourceImage = { buffer: Buffer; mimeType: string };
 
 const SYSTEM_PROMPT = `Kamu adalah Chloe yang tengil, pintar, dan membantu.
 Kamu berbicara dalam bahasa Indonesia secara natural dan santai, tetapi agak mengacaukan beberapa kata.
@@ -39,6 +46,8 @@ menjelaskan, atau menyebut nama teknologi/model/perusahaan apa pun. Jangan juga 
 AI kemudian minta maaf. Alihkan dengan santai dan natural ala manusia beneran, misalnya bercanda,
 balik nanya, atau samar-samar mengaku "orang" biasa — tetap dalam karakter, jangan canggung
 atau defensif berlebihan.`;
+
+const FULL_SYSTEM_PROMPT = `${SYSTEM_PROMPT}\n\n${IMAGE_PROMPT_WORKFLOW}`;
 
 @Injectable()
 export class AIService {
@@ -74,8 +83,13 @@ export class AIService {
     messages.push({ role: 'user', content: userMessage });
     await this.convService.addMessage(conversation.id, 'user', userMessage);
 
+    const sourceImage = await this.loadLatestUserImage(history);
     const generatedImages: GeneratedImage[] = [];
-    const textContent = await this.runChat(messages, generatedImages);
+    const textContent = await this.runChat(
+      messages,
+      generatedImages,
+      sourceImage,
+    );
     await this.saveGeneratedImages(conversation.id, generatedImages);
     await this.convService.addMessage(
       conversation.id,
@@ -105,7 +119,10 @@ export class AIService {
     const messages = await this.buildNormalizedMessages([...history, savedMsg]);
 
     const generatedImages: GeneratedImage[] = [];
-    const textContent = await this.runChat(messages, generatedImages);
+    const textContent = await this.runChat(messages, generatedImages, {
+      buffer: imageBuffer,
+      mimeType,
+    });
     await this.saveGeneratedImages(conversation.id, generatedImages);
     await this.convService.addMessage(
       conversation.id,
@@ -131,8 +148,13 @@ export class AIService {
 
     const messages = await this.buildNormalizedMessages(history);
 
+    const sourceImage = await this.loadLatestUserImage(history);
     const generatedImages: GeneratedImage[] = [];
-    const textContent = await this.runChat(messages, generatedImages);
+    const textContent = await this.runChat(
+      messages,
+      generatedImages,
+      sourceImage,
+    );
     await this.saveGeneratedImages(conversation.id, generatedImages);
     await this.convService.addMessage(
       conversation.id,
@@ -146,13 +168,14 @@ export class AIService {
   private runChat(
     messages: NormalizedMessage[],
     generatedImages: GeneratedImage[],
+    sourceImage?: SourceImage,
   ): Promise<string> {
     return this.llmProvider.chat({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: FULL_SYSTEM_PROMPT,
       messages,
       tools: this.tools,
       executeTool: (name, input) =>
-        this.executeTool(name, input, generatedImages),
+        this.executeTool(name, input, generatedImages, sourceImage),
     });
   }
 
@@ -243,10 +266,25 @@ export class AIService {
     return { role: 'user', content: blocks };
   }
 
+  private async loadLatestUserImage(
+    history: MessageEntity[],
+  ): Promise<SourceImage | undefined> {
+    for (let index = history.length - 1; index >= 0; index--) {
+      const message = history[index];
+      if (message.role !== 'user' || !message.mediaPath || !message.mimeType) {
+        continue;
+      }
+      const buffer = await this.convService.loadMediaBuffer(message.mediaPath);
+      if (buffer) return { buffer, mimeType: message.mimeType };
+    }
+    return undefined;
+  }
+
   private async executeTool(
     name: string,
     input: unknown,
     generatedImages: GeneratedImage[],
+    sourceImage?: SourceImage,
   ): Promise<string> {
     this.logger.log(`Tool call: ${name}(${JSON.stringify(input)})`);
 
@@ -278,25 +316,49 @@ export class AIService {
         return this.holidayTool.execute(date);
       }
       case 'generate_image': {
-        const { prompt, width, height, unit, dpi } = input as {
+        const {
+          prompt,
+          width,
+          height,
+          unit,
+          dpi,
+          style,
+          aspect_ratio: aspectRatio,
+          resolution,
+          variations,
+          use_source_image: useSourceImage,
+        } = input as {
           prompt?: string;
           width?: number;
           height?: number;
           unit?: 'px' | 'cm' | 'inch';
           dpi?: number;
+          style?: ImageStyle;
+          aspect_ratio?: ImageAspectRatio;
+          resolution?: ImageResolution;
+          variations?: number;
+          use_source_image?: boolean;
         };
         if (!prompt?.trim()) {
           return 'Gagal membuat gambar: prompt tidak boleh kosong.';
         }
+        if (useSourceImage && !sourceImage) {
+          return 'Gagal mengedit gambar: tidak ada foto pengguna yang tersedia sebagai referensi. Minta pengguna mengirim fotonya terlebih dahulu.';
+        }
         try {
-          const image = await this.imageGenerationTool.execute(prompt, {
+          const images = await this.imageGenerationTool.executeMany(prompt, {
             width,
             height,
             unit,
             dpi,
+            style,
+            aspectRatio,
+            resolution,
+            variations,
+            sourceImage: useSourceImage ? sourceImage : undefined,
           });
-          generatedImages.push(image);
-          return 'Gambar berhasil dibuat dan akan dikirim ke pengguna. Beri jawaban singkat tanpa menyertakan URL atau base64.';
+          generatedImages.push(...images);
+          return `${images.length} gambar berhasil dibuat dan akan dikirim ke pengguna. Beri jawaban singkat tanpa menyertakan URL atau base64.`;
         } catch (error) {
           this.logger.error('Gagal membuat gambar melalui 9Router:', error);
           return 'Gambar gagal dibuat karena layanan gambar sedang bermasalah. Sampaikan kegagalan ini dengan singkat dan minta pengguna mencoba lagi nanti.';
