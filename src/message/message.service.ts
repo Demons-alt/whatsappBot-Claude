@@ -3,10 +3,11 @@ import { AIService } from '../ai/ai.service';
 import { CommandHandler } from './command.handler';
 import { ConversationService } from '../conversation/conversation.service';
 import { WhitelistService } from '../whitelist/whitelist.service';
+import { BotResponse, textResponse } from './outgoing-message';
 
 export interface UnansweredReply {
   phoneNumber: string;
-  replies: string[];
+  response: BotResponse;
 }
 
 @Injectable()
@@ -20,12 +21,14 @@ export class MessageService {
     private readonly whitelistService: WhitelistService,
   ) {}
 
-  async handle(phoneNumber: string, text: string): Promise<string[]> {
+  async handle(phoneNumber: string, text: string): Promise<BotResponse> {
     const trimmed = text.trim();
     this.logger.log(`Pesan dari ${phoneNumber}: ${trimmed}`);
 
     if (trimmed.startsWith('/')) {
-      return this.commandHandler.handle(phoneNumber, trimmed);
+      return textResponse(
+        await this.commandHandler.handle(phoneNumber, trimmed),
+      );
     }
 
     return this.aiService.chat(phoneNumber, trimmed);
@@ -36,7 +39,7 @@ export class MessageService {
     buffer: Buffer,
     mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
     caption?: string,
-  ): Promise<string[]> {
+  ): Promise<BotResponse> {
     this.logger.log(`Foto dari ${phoneNumber}${caption ? `: ${caption}` : ''}`);
     return this.aiService.chatWithImage(phoneNumber, buffer, mimeType, caption);
   }
@@ -64,9 +67,9 @@ export class MessageService {
       if (!stillAllowed) continue;
 
       try {
-        const replies = await this.aiService.answerPending(conv.phoneNumber);
-        if (replies.length > 0) {
-          results.push({ phoneNumber: conv.phoneNumber, replies });
+        const response = await this.aiService.answerPending(conv.phoneNumber);
+        if (response.bubbles.length > 0 || response.images.length > 0) {
+          results.push({ phoneNumber: conv.phoneNumber, response });
         }
       } catch (err) {
         this.logger.error(

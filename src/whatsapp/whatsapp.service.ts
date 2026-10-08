@@ -62,6 +62,7 @@ import {
   WhitelistApprovedEvent,
   WhitelistEventBus,
 } from '../whitelist/whitelist-events';
+import { BotResponse, textResponse } from '../message/outgoing-message';
 
 const BUBBLE_DELAY_MS = 1000;
 
@@ -232,11 +233,11 @@ export class WhatsappService implements OnModuleInit {
         }
 
         try {
-          let replies: string[];
+          let response: BotResponse;
 
           if (stickerMsg) {
             // Tidak bisa "membaca" stiker — minta pengirim pakai teks saja.
-            replies = [STICKER_FALLBACK_TEXT];
+            response = textResponse([STICKER_FALLBACK_TEXT]);
           } else if (imageMsg) {
             const rawMime = imageMsg.mimetype ?? 'image/jpeg';
             const mimeType = (
@@ -244,7 +245,7 @@ export class WhatsappService implements OnModuleInit {
             ) as SupportedImageMime;
             const buffer = await downloadMediaMessage(msg, 'buffer', {});
             const caption = imageMsg.caption ?? '';
-            replies = await this.messageService.handleImage(
+            response = await this.messageService.handleImage(
               phoneNumber,
               buffer,
               mimeType,
@@ -260,10 +261,10 @@ export class WhatsappService implements OnModuleInit {
             !this.apologizedThisSession.has(phoneNumber)
           ) {
             this.apologizedThisSession.add(phoneNumber);
-            replies = [this.pickApology(), ...replies];
+            response.bubbles = [this.pickApology(), ...response.bubbles];
           }
 
-          await this.sendBubbles(remoteJid, replies);
+          await this.sendResponse(remoteJid, response);
         } catch (err) {
           this.logger.error(`Error memproses pesan dari ${phoneNumber}:`, err);
           try {
@@ -370,14 +371,17 @@ export class WhatsappService implements OnModuleInit {
     const combinedText = batch.parts.join('\n');
 
     try {
-      let replies = await this.messageService.handle(phoneNumber, combinedText);
+      const response = await this.messageService.handle(
+        phoneNumber,
+        combinedText,
+      );
 
       if (batch.hasStale && !this.apologizedThisSession.has(phoneNumber)) {
         this.apologizedThisSession.add(phoneNumber);
-        replies = [this.pickApology(), ...replies];
+        response.bubbles = [this.pickApology(), ...response.bubbles];
       }
 
-      await this.sendBubbles(batch.remoteJid, replies);
+      await this.sendResponse(batch.remoteJid, response);
     } catch (err) {
       this.logger.error(`Error memproses pesan dari ${phoneNumber}:`, err);
       try {
@@ -554,27 +558,30 @@ export class WhatsappService implements OnModuleInit {
     const jid = `${phoneNumber}@s.whatsapp.net`;
 
     try {
-      let replies: string[];
+      let response: BotResponse;
 
       if (pending.mediaPath && pending.mimeType) {
         const buffer = await this.pendingMessageService.loadMedia(
           pending.mediaPath,
         );
         if (buffer) {
-          replies = await this.messageService.handleImage(
+          response = await this.messageService.handleImage(
             phoneNumber,
             buffer,
             pending.mimeType as SupportedImageMime,
             pending.text || undefined,
           );
         } else {
-          replies = await this.messageService.handle(phoneNumber, pending.text);
+          response = await this.messageService.handle(
+            phoneNumber,
+            pending.text,
+          );
         }
       } else {
-        replies = await this.messageService.handle(phoneNumber, pending.text);
+        response = await this.messageService.handle(phoneNumber, pending.text);
       }
 
-      await this.sendBubbles(jid, replies);
+      await this.sendResponse(jid, response);
     } catch (err) {
       this.logger.error(
         `Gagal memproses pesan pending untuk ${phoneNumber}:`,
@@ -603,10 +610,10 @@ export class WhatsappService implements OnModuleInit {
       `Membalas ${results.length} chat yang tertunda dari sebelumnya...`,
     );
 
-    for (const { phoneNumber, replies } of results) {
+    for (const { phoneNumber, response } of results) {
       const jid = `${phoneNumber}@s.whatsapp.net`;
       try {
-        await this.sendBubbles(jid, replies);
+        await this.sendResponse(jid, response);
       } catch (err) {
         this.logger.error(
           `Gagal mengirim balasan tertunda ke ${phoneNumber}:`,
@@ -657,6 +664,25 @@ export class WhatsappService implements OnModuleInit {
       if (i < bubbles.length - 1) {
         await this.delay(BUBBLE_DELAY_MS);
       }
+    }
+  }
+
+  private async sendResponse(
+    jid: string,
+    response: BotResponse,
+  ): Promise<void> {
+    await this.sendBubbles(jid, response.bubbles);
+    if (!this.sock) return;
+
+    for (let i = 0; i < response.images.length; i++) {
+      if (response.bubbles.length > 0 || i > 0) {
+        await this.delay(BUBBLE_DELAY_MS);
+      }
+      const image = response.images[i];
+      await this.sock.sendMessage(jid, {
+        image: image.buffer,
+        mimetype: image.mimeType,
+      });
     }
   }
 

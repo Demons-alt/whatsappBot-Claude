@@ -10,6 +10,7 @@ import { ConversationModule } from '../conversation/conversation.module';
 import { LLM_PROVIDER } from './providers/llm-provider.interface';
 import { AnthropicProvider } from './providers/anthropic.provider';
 import { ChatCombosProvider } from './providers/chat-combos.provider';
+import { ImageGenerationTool } from './tools/image-generation.tool';
 
 @Module({
   imports: [ConversationModule],
@@ -20,6 +21,7 @@ import { ChatCombosProvider } from './providers/chat-combos.provider';
     CurrencyTool,
     PrayerTool,
     HolidayTool,
+    ImageGenerationTool,
     AnthropicProvider,
     ChatCombosProvider,
     {

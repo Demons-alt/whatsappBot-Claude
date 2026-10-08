@@ -12,6 +12,8 @@ import type {
   NormalizedContentBlock,
   NormalizedMessage,
 } from './providers/llm-provider.interface';
+import { ImageGenerationTool } from './tools/image-generation.tool';
+import { BotResponse, GeneratedImage } from '../message/outgoing-message';
 
 const BUBBLE_DELIMITER = '|||';
 const MAX_IMAGES_IN_HISTORY = 3;
@@ -49,6 +51,7 @@ export class AIService {
       this.currencyTool.definition,
       this.prayerTool.definition,
       this.holidayTool.definition,
+      this.imageGenerationTool.definition,
     ];
   }
 
@@ -60,9 +63,10 @@ export class AIService {
     private readonly currencyTool: CurrencyTool,
     private readonly prayerTool: PrayerTool,
     private readonly holidayTool: HolidayTool,
+    private readonly imageGenerationTool: ImageGenerationTool,
   ) {}
 
-  async chat(phoneNumber: string, userMessage: string): Promise<string[]> {
+  async chat(phoneNumber: string, userMessage: string): Promise<BotResponse> {
     const conversation = await this.convService.getOrCreate(phoneNumber);
     const history = await this.convService.getMessages(conversation.id, 20);
 
@@ -70,14 +74,16 @@ export class AIService {
     messages.push({ role: 'user', content: userMessage });
     await this.convService.addMessage(conversation.id, 'user', userMessage);
 
-    const textContent = await this.runChat(messages);
+    const generatedImages: GeneratedImage[] = [];
+    const textContent = await this.runChat(messages, generatedImages);
+    await this.saveGeneratedImages(conversation.id, generatedImages);
     await this.convService.addMessage(
       conversation.id,
       'assistant',
       textContent,
     );
 
-    return this.splitBubbles(textContent);
+    return { bubbles: this.splitBubbles(textContent), images: generatedImages };
   }
 
   async chatWithImage(
@@ -85,7 +91,7 @@ export class AIService {
     imageBuffer: Buffer,
     mimeType: ImageMimeType,
     caption?: string,
-  ): Promise<string[]> {
+  ): Promise<BotResponse> {
     const conversation = await this.convService.getOrCreate(phoneNumber);
     const history = await this.convService.getMessages(conversation.id, 20);
 
@@ -98,14 +104,16 @@ export class AIService {
 
     const messages = await this.buildNormalizedMessages([...history, savedMsg]);
 
-    const textContent = await this.runChat(messages);
+    const generatedImages: GeneratedImage[] = [];
+    const textContent = await this.runChat(messages, generatedImages);
+    await this.saveGeneratedImages(conversation.id, generatedImages);
     await this.convService.addMessage(
       conversation.id,
       'assistant',
       textContent,
     );
 
-    return this.splitBubbles(textContent);
+    return { bubbles: this.splitBubbles(textContent), images: generatedImages };
   }
 
   /**
@@ -113,32 +121,38 @@ export class AIService {
    * (e.g. the process crashed/restarted before answering) — reuses that message as
    * the prompt instead of appending a new one, since nothing new was actually sent.
    */
-  async answerPending(phoneNumber: string): Promise<string[]> {
+  async answerPending(phoneNumber: string): Promise<BotResponse> {
     const conversation = await this.convService.getOrCreate(phoneNumber);
     const history = await this.convService.getMessages(conversation.id, 20);
 
     if (history.length === 0 || history[history.length - 1].role !== 'user') {
-      return [];
+      return { bubbles: [], images: [] };
     }
 
     const messages = await this.buildNormalizedMessages(history);
 
-    const textContent = await this.runChat(messages);
+    const generatedImages: GeneratedImage[] = [];
+    const textContent = await this.runChat(messages, generatedImages);
+    await this.saveGeneratedImages(conversation.id, generatedImages);
     await this.convService.addMessage(
       conversation.id,
       'assistant',
       textContent,
     );
 
-    return this.splitBubbles(textContent);
+    return { bubbles: this.splitBubbles(textContent), images: generatedImages };
   }
 
-  private runChat(messages: NormalizedMessage[]): Promise<string> {
+  private runChat(
+    messages: NormalizedMessage[],
+    generatedImages: GeneratedImage[],
+  ): Promise<string> {
     return this.llmProvider.chat({
       systemPrompt: SYSTEM_PROMPT,
       messages,
       tools: this.tools,
-      executeTool: (name, input) => this.executeTool(name, input),
+      executeTool: (name, input) =>
+        this.executeTool(name, input, generatedImages),
     });
   }
 
@@ -147,6 +161,20 @@ export class AIService {
       .split(BUBBLE_DELIMITER)
       .map((s) => s.trim())
       .filter(Boolean);
+  }
+
+  private async saveGeneratedImages(
+    conversationId: string,
+    images: GeneratedImage[],
+  ): Promise<void> {
+    for (const image of images) {
+      await this.convService.saveAssistantImage(
+        conversationId,
+        image.buffer,
+        image.mimeType,
+        image.prompt,
+      );
+    }
   }
 
   private async buildNormalizedMessages(
@@ -215,7 +243,11 @@ export class AIService {
     return { role: 'user', content: blocks };
   }
 
-  private async executeTool(name: string, input: unknown): Promise<string> {
+  private async executeTool(
+    name: string,
+    input: unknown,
+    generatedImages: GeneratedImage[],
+  ): Promise<string> {
     this.logger.log(`Tool call: ${name}(${JSON.stringify(input)})`);
 
     switch (name) {
@@ -244,6 +276,31 @@ export class AIService {
       case 'get_holiday': {
         const { date } = input as { date?: string };
         return this.holidayTool.execute(date);
+      }
+      case 'generate_image': {
+        const { prompt, width, height, unit, dpi } = input as {
+          prompt?: string;
+          width?: number;
+          height?: number;
+          unit?: 'px' | 'cm' | 'inch';
+          dpi?: number;
+        };
+        if (!prompt?.trim()) {
+          return 'Gagal membuat gambar: prompt tidak boleh kosong.';
+        }
+        try {
+          const image = await this.imageGenerationTool.execute(prompt, {
+            width,
+            height,
+            unit,
+            dpi,
+          });
+          generatedImages.push(image);
+          return 'Gambar berhasil dibuat dan akan dikirim ke pengguna. Beri jawaban singkat tanpa menyertakan URL atau base64.';
+        } catch (error) {
+          this.logger.error('Gagal membuat gambar melalui 9Router:', error);
+          return 'Gambar gagal dibuat karena layanan gambar sedang bermasalah. Sampaikan kegagalan ini dengan singkat dan minta pengguna mencoba lagi nanti.';
+        }
       }
       default:
         return `Tool "${name}" tidak dikenali.`;

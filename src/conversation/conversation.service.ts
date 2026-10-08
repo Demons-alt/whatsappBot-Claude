@@ -85,6 +85,29 @@ export class ConversationService {
     return msg;
   }
 
+  async saveAssistantImage(
+    conversationId: string,
+    buffer: Buffer,
+    mimeType: string,
+    prompt: string,
+  ): Promise<MessageEntity> {
+    const msg = await this.addMessage(
+      conversationId,
+      'assistant',
+      `[Gambar dibuat: ${prompt}]`,
+    );
+    const mediaPath = await this.mediaStorage.save(
+      conversationId,
+      msg.id,
+      buffer,
+      mimeType,
+    );
+    await this.setMessageMedia(msg.id, mediaPath, mimeType);
+    msg.mediaPath = mediaPath;
+    msg.mimeType = mimeType;
+    return msg;
+  }
+
   loadMediaBuffer(mediaPath: string): Promise<Buffer | null> {
     return this.mediaStorage.read(mediaPath);
   }
