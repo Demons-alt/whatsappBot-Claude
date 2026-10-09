@@ -106,6 +106,9 @@ export class ChatCombosProvider implements LlmProvider {
       body: JSON.stringify({
         model: this.model,
         max_tokens: this.maxTokens,
+        // The provider consumes one OpenAI-compatible JSON response below.
+        // Some gateways default to SSE unless streaming is explicitly disabled.
+        stream: false,
         messages,
         tools: tools.length ? tools : undefined,
       }),
@@ -117,11 +120,24 @@ export class ChatCombosProvider implements LlmProvider {
       throw new Error(`ChatCombos API error ${response.status}`);
     }
 
-    const data = (await response.json()) as {
+    const responseText = await response.text();
+    let data: {
       choices?: Array<{
         message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
       }>;
     };
+    try {
+      data = JSON.parse(responseText) as typeof data;
+    } catch (error) {
+      const contentType = response.headers.get('content-type') ?? 'unknown';
+      const excerpt = responseText.slice(0, 500).replace(/\s+/g, ' ');
+      this.logger.error(
+        `Invalid ChatCombos response (content-type: ${contentType}): ${excerpt}`,
+      );
+      throw new Error('ChatCombos returned a non-JSON completion response', {
+        cause: error,
+      });
+    }
     const choice = data.choices?.[0]?.message ?? {};
     return { content: choice.content ?? null, tool_calls: choice.tool_calls };
   }
