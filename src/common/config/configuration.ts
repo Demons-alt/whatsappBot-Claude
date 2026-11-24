@@ -26,13 +26,13 @@ export default () => ({
     // Bearer auth. Model id is whatever the gateway currently routes to.
     apiKey: process.env.CHAT_COMBOS_API_KEY ?? '',
     baseUrl: process.env.CHAT_COMBOS_BASE_URL ?? 'http://10.20.30.50:20128/v1',
-    model: process.env.CHAT_COMBOS_MODEL ?? 'chat-combos',
+    model: process.env.CHAT_COMBOS_MODEL ?? 'chat',
     imageModel:
       process.env.CHAT_COMBOS_IMAGE_MODEL ??
       'gemini/gemini-3-pro-image-preview',
-    // Headroom for reasoning-style models the gateway might route to — hidden
-    // chain-of-thought eats into the same budget as the visible reply.
-    maxTokens: parseInt(process.env.CHAT_COMBOS_MAX_TOKENS ?? '2048', 10),
+    maxTokens: process.env.CHAT_COMBOS_MAX_TOKENS
+      ? parseInt(process.env.CHAT_COMBOS_MAX_TOKENS, 10)
+      : undefined,
   },
   openweather: {
     apiKey: process.env.OPENWEATHER_API_KEY ?? '',

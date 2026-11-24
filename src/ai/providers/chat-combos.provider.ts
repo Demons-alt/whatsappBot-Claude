@@ -38,15 +38,15 @@ export class ChatCombosProvider implements LlmProvider {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly model: string;
-  private readonly maxTokens: number;
+  private readonly maxTokens?: number;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('chatCombos.apiKey') ?? '';
     this.baseUrl =
       this.config.get<string>('chatCombos.baseUrl') ??
       'http://10.20.30.50:20128/v1';
-    this.model = this.config.get<string>('chatCombos.model') ?? 'chat-combos';
-    this.maxTokens = this.config.get<number>('chatCombos.maxTokens') ?? 2048;
+    this.model = this.config.get<string>('chatCombos.model') ?? 'chat';
+    this.maxTokens = this.config.get<number>('chatCombos.maxTokens');
   }
 
   async chat({
@@ -56,7 +56,7 @@ export class ChatCombosProvider implements LlmProvider {
     executeTool,
   }: LlmChatParams): Promise<string> {
     const openAiMessages: OpenAiMessage[] = [
-      { role: 'system', content: systemPrompt },
+      ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
       ...messages.map((m) => this.toOpenAiMessage(m)),
     ];
     const openAiTools = tools.map((t) => this.toOpenAiTool(t));
@@ -106,9 +106,6 @@ export class ChatCombosProvider implements LlmProvider {
       body: JSON.stringify({
         model: this.model,
         max_tokens: this.maxTokens,
-        // The provider consumes one OpenAI-compatible JSON response below.
-        // Some gateways default to SSE unless streaming is explicitly disabled.
-        stream: false,
         messages,
         tools: tools.length ? tools : undefined,
       }),

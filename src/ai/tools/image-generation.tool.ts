@@ -206,18 +206,27 @@ export class ImageGenerationTool {
     );
 
     if (!response.ok) {
-      const detail = await response.text();
-      this.logger.error(
-        `9Router image API error ${response.status}: ${detail}`,
-      );
+      this.logger.error(`9Router image API error ${response.status}`);
       throw new Error(`9Router image API error ${response.status}`);
     }
 
     const contentType =
       response.headers.get('content-type')?.split(';')[0].trim() || 'image/png';
+    if (contentType === 'application/json') {
+      const payload = (await response.json()) as {
+        data?: Array<{ b64_json?: unknown }>;
+      } | null;
+      const encoded = payload?.data?.[0]?.b64_json;
+      if (typeof encoded === 'string' && encoded.length > 0) {
+        const buffer = Buffer.from(encoded, 'base64');
+        const mimeType = this.detectImageMimeType(buffer);
+        if (mimeType) {
+          return { buffer, mimeType, prompt: originalPrompt };
+        }
+      }
+    }
     if (!contentType.startsWith('image/')) {
-      const detail = await response.text();
-      this.logger.error(`9Router image API returned ${contentType}: ${detail}`);
+      this.logger.error(`9Router image API returned no image in ${contentType}`);
       throw new Error('9Router image API tidak mengembalikan gambar.');
     }
 
@@ -227,6 +236,21 @@ export class ImageGenerationTool {
     }
 
     return { buffer, mimeType: contentType, prompt: originalPrompt };
+  }
+
+  private detectImageMimeType(buffer: Buffer): string | undefined {
+    if (buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) {
+      return 'image/png';
+    }
+    if (buffer.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) {
+      return 'image/jpeg';
+    }
+    if (
+      buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
+      return 'image/webp';
+    }
   }
 
   toPixelSize(options: ImageGenerationOptions): string | undefined {
